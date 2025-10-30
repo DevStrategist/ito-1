@@ -61,6 +61,14 @@ build_native_workspace() {
             print_info "Creating symlink: x64-apple-darwin -> x86_64-apple-darwin"
             ln -sfn x86_64-apple-darwin target/x64-apple-darwin
         fi
+
+        # Build Swift packages
+        print_info "Building Swift packages..."
+        cd cursor-context
+        swift build -c release --arch arm64 --arch x86_64
+        # Copy built binary to Rust target directory for consistency
+        cp .build/apple/Products/Release/cursor-context "../target/$mac_target/release/"
+        cd ..
     fi
 
     # --- Windows Build ---
