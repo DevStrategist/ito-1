@@ -70,8 +70,10 @@ build_native_workspace() {
         else
             swift build -c release --arch x86_64
         fi
-        # Copy built binary to Rust target directory for consistency
+        # Copy built binary to Rust target directory and re-sign for code signing compatibility
         cp .build/release/cursor-context "../target/$mac_target/release/"
+        xattr -cr "../target/$mac_target/release/cursor-context"
+        codesign --force --sign - "../target/$mac_target/release/cursor-context" 2>/dev/null || true
         cd ..
     fi
 

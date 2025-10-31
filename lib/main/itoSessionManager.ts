@@ -85,22 +85,16 @@ export class ItoSessionManager {
           },
         )
         const duration = Date.now() - startTime
-        console.log(
-          '[itoSessionManager] Cursor context from accessibility API:',
-          {
-            ...result,
-            retrievalTimeMs: duration,
-          },
-        )
+        console.log('[CONTEXT] Cursor context from accessibility API:', {
+          ...result,
+          retrievalTimeMs: duration,
+        })
       } catch (error) {
-        console.error(
-          '[itoSessionManager] Failed to get cursor context:',
-          error,
-        )
+        console.error('[CONTEXT] Failed to get cursor context:', error)
       }
     } else {
       console.log(
-        '[itoSessionManager] Skipping cursor context fetch, not running on macOS or provider not initialized',
+        '[CONTEXT] Skipping cursor context fetch, not running on macOS or provider not initialized',
       )
     }
 
