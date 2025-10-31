@@ -3,18 +3,6 @@ import Foundation
 
 // MARK: - Data Structures
 
-struct Command: Codable {
-    let command: String
-    let options: Options?
-    let requestId: String
-
-    struct Options: Codable {
-        let maxCharsBefore: Int?
-        let maxCharsAfter: Int?
-        let timeout: Int?
-    }
-}
-
 struct CursorPosition: Codable {
     let offset: Int
     let line: Int?
@@ -43,15 +31,6 @@ struct CursorContextResult: Codable {
     let context: CursorContext?
     let error: String?
     let method: String
-}
-
-struct Response: Codable {
-    let type: String
-    let requestId: String?
-    let result: CursorContextResult?
-    let error: String?
-    let id: String?
-    let timestamp: String?
 }
 
 // MARK: - Accessibility Functions
@@ -91,9 +70,15 @@ func getCursorContext(maxCharsBefore: Int = 1000, maxCharsAfter: Int = 1000) -> 
         return CursorContextResult(
             success: false,
             context: nil,
-            error: "No focused text element found",
+            error: "No focused text element found. Make sure a text field is focused and accessibility permissions are granted.",
             method: "accessibility"
         )
+    }
+
+    // Get the role of the focused element for debugging
+    var roleDescription = "unknown"
+    if let role = getAttributeValue(focusedElement, kAXRoleAttribute as String) as? String {
+        roleDescription = role
     }
 
     // Get the full text value
@@ -101,7 +86,7 @@ func getCursorContext(maxCharsBefore: Int = 1000, maxCharsAfter: Int = 1000) -> 
         return CursorContextResult(
             success: false,
             context: nil,
-            error: "Unable to retrieve text value from focused element",
+            error: "Unable to retrieve text value from focused element (role: \(roleDescription)). Element may not support text input.",
             method: "accessibility"
         )
     }
@@ -161,90 +146,43 @@ func getCursorContext(maxCharsBefore: Int = 1000, maxCharsAfter: Int = 1000) -> 
     )
 }
 
-// MARK: - JSON I/O
+// MARK: - Main
 
-func sendResponse(_ response: Response) {
+// Parse command line arguments for maxCharsBefore and maxCharsAfter
+func main() {
+    fputs("DEBUG: main() started\n", stderr)
+    fflush(stderr)
+
+    let args = CommandLine.arguments
+    var maxCharsBefore = 1000
+    var maxCharsAfter = 1000
+
+    // Parse arguments: cursor-context --before 500 --after 500
+    for i in 1..<args.count {
+        if args[i] == "--before" && i + 1 < args.count {
+            maxCharsBefore = Int(args[i + 1]) ?? 1000
+        } else if args[i] == "--after" && i + 1 < args.count {
+            maxCharsAfter = Int(args[i + 1]) ?? 1000
+        }
+    }
+
+    fputs("DEBUG: About to call getCursorContext\n", stderr)
+    fflush(stderr)
+
+    let result = getCursorContext(maxCharsBefore: maxCharsBefore, maxCharsAfter: maxCharsAfter)
+
+    fputs("DEBUG: Got result, encoding JSON\n", stderr)
+    fflush(stderr)
+
     let encoder = JSONEncoder()
-    if let jsonData = try? encoder.encode(response),
+    if let jsonData = try? encoder.encode(result),
        let jsonString = String(data: jsonData, encoding: .utf8) {
         print(jsonString)
-        fflush(stdout)
-    }
-}
-
-func sendHeartbeat(id: Int) {
-    let response = Response(
-        type: "heartbeat_ping",
-        requestId: nil,
-        result: nil,
-        error: nil,
-        id: String(id),
-        timestamp: ISO8601DateFormatter().string(from: Date())
-    )
-    sendResponse(response)
-}
-
-// MARK: - Command Processing
-
-func processCommand(_ command: Command) {
-    switch command.command {
-    case "get-context":
-        let maxCharsBefore = command.options?.maxCharsBefore ?? 1000
-        let maxCharsAfter = command.options?.maxCharsAfter ?? 1000
-
-        let result = getCursorContext(maxCharsBefore: maxCharsBefore, maxCharsAfter: maxCharsAfter)
-
-        let response = Response(
-            type: "context-result",
-            requestId: command.requestId,
-            result: result,
-            error: nil,
-            id: nil,
-            timestamp: nil
-        )
-        sendResponse(response)
-
-    default:
-        let response = Response(
-            type: "error",
-            requestId: command.requestId,
-            result: nil,
-            error: "Unknown command: \(command.command)",
-            id: nil,
-            timestamp: nil
-        )
-        sendResponse(response)
-    }
-}
-
-// MARK: - Main Loop
-
-func main() {
-    let decoder = JSONDecoder()
-
-    // Start heartbeat thread
-    var heartbeatId = 0
-    DispatchQueue.global(qos: .background).async {
-        while true {
-            Thread.sleep(forTimeInterval: 10.0)
-            heartbeatId += 1
-            sendHeartbeat(id: heartbeatId)
-        }
     }
 
-    // Main command processing loop
-    while let line = readLine() {
-        guard let data = line.data(using: .utf8) else { continue }
-
-        do {
-            let command = try decoder.decode(Command.self, from: data)
-            processCommand(command)
-        } catch {
-            fputs("Error parsing command: \(error)\n", stderr)
-            fflush(stderr)
-        }
-    }
+    fputs("DEBUG: main() finished\n", stderr)
+    fflush(stderr)
 }
 
-// Run the main loop
+// Run once and exit
 main()

@@ -9,6 +9,7 @@ import { GrammarRulesService } from './grammar/GrammarRulesService'
 import { getAdvancedSettings } from './store'
 import log from 'electron-log'
 import { timingCollector, TimingEventName } from './timing/TimingCollector'
+import { macOSAccessibilityContextProvider } from '../media/macOSAccessibilityContextProvider'
 
 export class ItoSessionManager {
   private readonly MINIMUM_AUDIO_DURATION_MS = 100
@@ -69,6 +70,39 @@ export class ItoSessionManager {
   private async fetchAndSendContext() {
     // This builds the full config (window context, selected text, vocabulary, settings)
     await itoStreamController.sendConfigUpdate()
+
+    // Fetch cursor context using accessibility APIs (macOS only for now)
+    if (
+      process.platform === 'darwin' &&
+      macOSAccessibilityContextProvider.isRunning()
+    ) {
+      try {
+        const startTime = Date.now()
+        const result = await macOSAccessibilityContextProvider.getCursorContext(
+          {
+            maxCharsBefore: 1000,
+            maxCharsAfter: 1000,
+          },
+        )
+        const duration = Date.now() - startTime
+        console.log(
+          '[itoSessionManager] Cursor context from accessibility API:',
+          {
+            ...result,
+            retrievalTimeMs: duration,
+          },
+        )
+      } catch (error) {
+        console.error(
+          '[itoSessionManager] Failed to get cursor context:',
+          error,
+        )
+      }
+    } else {
+      console.log(
+        '[itoSessionManager] Skipping cursor context fetch, not running on macOS or provider not initialized',
+      )
+    }
 
     // Fetch cursor context for grammar rules only if grammar service is enabled
     const { grammarServiceEnabled } = getAdvancedSettings()

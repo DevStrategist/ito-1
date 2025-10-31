@@ -19,8 +19,6 @@ import type {
 
 const NATIVE_MODULE_NAME = 'cursor-context'
 const DEFAULT_TIMEOUT = 5000 // 5 seconds
-const HEARTBEAT_CHECK_INTERVAL = 5000 // Check every 5 seconds
-const HEARTBEAT_TIMEOUT = 15000 // 15 seconds without heartbeat triggers restart
 
 interface CursorContextCommand {
   command: 'get-context'
@@ -50,8 +48,6 @@ export class MacOSAccessibilityContextProvider
   #process: ChildProcess | null = null
   #pendingRequests = new Map<string, PendingRequest>()
   #requestIdCounter = 0
-  #lastHeartbeatReceived = Date.now()
-  #heartbeatCheckTimer: NodeJS.Timeout | null = null
 
   constructor() {
     super()
@@ -93,9 +89,9 @@ export class MacOSAccessibilityContextProvider
       this.#process.on('close', this.#onClose.bind(this))
       this.#process.on('error', this.#onError.bind(this))
 
-      this.#startHeartbeatMonitoring()
-
-      console.log('[MacOSAccessibilityContextProvider] Process started successfully.')
+      console.log(
+        '[MacOSAccessibilityContextProvider] Process started successfully.',
+      )
       this.emit('ready')
     } catch (err) {
       log.error(
@@ -111,8 +107,6 @@ export class MacOSAccessibilityContextProvider
   public shutdown(): void {
     if (this.#process) {
       console.log('[MacOSAccessibilityContextProvider] Shutting down process.')
-
-      this.#stopHeartbeatMonitoring()
 
       this.#process.kill()
       this.#process = null
@@ -174,13 +168,19 @@ export class MacOSAccessibilityContextProvider
 
     try {
       const commandStr = JSON.stringify(command) + '\n'
+      console.log('[MacOSAccessibilityContextProvider] Sending command:', commandStr.trim())
       this.#process.stdin.write(commandStr)
+      console.log('[MacOSAccessibilityContextProvider] Command sent successfully')
     } catch (error) {
-      log.error('[MacOSAccessibilityContextProvider] Error sending command:', error)
+      log.error(
+        '[MacOSAccessibilityContextProvider] Error sending command:',
+        error,
+      )
     }
   }
 
   #onData(data: Buffer): void {
+    console.log('[MacOSAccessibilityContextProvider] Received stdout data:', data.toString().trim())
     const lines = data.toString().trim().split('\n')
 
     for (const line of lines) {
@@ -189,15 +189,11 @@ export class MacOSAccessibilityContextProvider
       try {
         const response: CursorContextResponse = JSON.parse(line)
 
-        // Handle heartbeat
-        if (response.type === 'heartbeat_ping') {
-          this.#lastHeartbeatReceived = Date.now()
-          this.emit('heartbeat', response.timestamp || new Date().toISOString())
-          continue
-        }
-
         // Handle context result or error
-        if (response.requestId && this.#pendingRequests.has(response.requestId)) {
+        if (
+          response.requestId &&
+          this.#pendingRequests.has(response.requestId)
+        ) {
           const { resolve, reject, timeoutId } = this.#pendingRequests.get(
             response.requestId,
           )!
@@ -232,7 +228,9 @@ export class MacOSAccessibilityContextProvider
   }
 
   #onStdErr(data: Buffer): void {
-    log.error('[MacOSAccessibilityContextProvider] stderr:', data.toString())
+    const message = data.toString()
+    console.log('[MacOSAccessibilityContextProvider] stderr:', message)
+    log.error('[MacOSAccessibilityContextProvider] stderr:', message)
   }
 
   #onClose(code: number | null, signal: string | null): void {
@@ -240,7 +238,6 @@ export class MacOSAccessibilityContextProvider
       `[MacOSAccessibilityContextProvider] Process exited with code: ${code}, signal: ${signal}`,
     )
 
-    this.#stopHeartbeatMonitoring()
     this.#process = null
 
     // Reject all pending requests
@@ -259,30 +256,8 @@ export class MacOSAccessibilityContextProvider
     log.error('[MacOSAccessibilityContextProvider] Process error:', error)
     this.emit('error', error)
   }
-
-  #startHeartbeatMonitoring(): void {
-    this.#lastHeartbeatReceived = Date.now()
-
-    this.#heartbeatCheckTimer = setInterval(() => {
-      const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeatReceived
-
-      if (timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
-        log.error(
-          `[MacOSAccessibilityContextProvider] No heartbeat for ${timeSinceLastHeartbeat}ms, process may be unresponsive`,
-        )
-        this.emit('error', new Error('Heartbeat timeout'))
-        // Could implement auto-restart here if needed
-      }
-    }, HEARTBEAT_CHECK_INTERVAL)
-  }
-
-  #stopHeartbeatMonitoring(): void {
-    if (this.#heartbeatCheckTimer) {
-      clearInterval(this.#heartbeatCheckTimer)
-      this.#heartbeatCheckTimer = null
-    }
-  }
 }
 
 // Export singleton instance
-export const macOSAccessibilityContextProvider = new MacOSAccessibilityContextProvider()
+export const macOSAccessibilityContextProvider =
+  new MacOSAccessibilityContextProvider()

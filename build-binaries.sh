@@ -65,9 +65,13 @@ build_native_workspace() {
         # Build Swift packages
         print_info "Building Swift packages..."
         cd cursor-context
-        swift build -c release --arch arm64 --arch x86_64
+        if [ "$mac_target" = "aarch64-apple-darwin" ]; then
+            swift build -c release --arch arm64
+        else
+            swift build -c release --arch x86_64
+        fi
         # Copy built binary to Rust target directory for consistency
-        cp .build/apple/Products/Release/cursor-context "../target/$mac_target/release/"
+        cp .build/release/cursor-context "../target/$mac_target/release/"
         cd ..
     fi
 
