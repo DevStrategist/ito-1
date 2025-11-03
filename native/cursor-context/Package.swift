@@ -8,7 +8,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "cursor-context",
-            dependencies: []
+            dependencies: [],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+            ]
         )
     ]
 )
