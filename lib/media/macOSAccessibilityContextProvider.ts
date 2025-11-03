@@ -61,7 +61,12 @@ export class MacOSAccessibilityContextProvider
     const timeout = options?.timeout || DEFAULT_TIMEOUT
 
     return new Promise((resolve, reject) => {
-      const args = ['--before', String(maxCharsBefore), '--after', String(maxCharsAfter)]
+      const args = [
+        '--before',
+        String(maxCharsBefore),
+        '--after',
+        String(maxCharsAfter),
+      ]
 
       execFile(
         this.#binaryPath!,
@@ -69,27 +74,41 @@ export class MacOSAccessibilityContextProvider
         { timeout },
         (error, stdout, stderr) => {
           if (error) {
-            log.error('[MacOSAccessibilityContextProvider] execFile error:', error)
+            log.error(
+              '[MacOSAccessibilityContextProvider] execFile error:',
+              error,
+            )
             reject(error)
             return
           }
 
           if (stderr) {
-            console.log('[MacOSAccessibilityContextProvider] stderr:', stderr.trim())
+            console.log(
+              '[MacOSAccessibilityContextProvider] stderr:',
+              stderr.trim(),
+            )
           }
 
           try {
             const result: CursorContextResult = JSON.parse(stdout.trim())
+            console.log(
+              '[MacOSAccessibilityContextProvider] Retrieved cursor context:',
+              result,
+            )
             resolve(result)
           } catch (parseError) {
-            log.error('[MacOSAccessibilityContextProvider] Failed to parse JSON:', parseError)
+            log.error(
+              '[MacOSAccessibilityContextProvider] Failed to parse JSON:',
+              parseError,
+            )
             reject(new Error('Failed to parse response from native binary'))
           }
-        }
+        },
       )
     })
   }
 }
 
 // Export singleton instance
-export const macOSAccessibilityContextProvider = new MacOSAccessibilityContextProvider()
+export const macOSAccessibilityContextProvider =
+  new MacOSAccessibilityContextProvider()
