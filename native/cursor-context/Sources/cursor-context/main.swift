@@ -164,6 +164,19 @@ func inspectElement(_ element: AXUIElement, label: String) {
         if names.count > 20 {
             fputs("      ... (\(names.count - 20) more)\n", stderr)
         }
+
+        // Check interesting attributes for debugging
+        let interestingAttrs = ["AXDescription", "AXTitle", "AXHelp", "AXPlaceholderValue", "ChromeAXNodeId", "AXDOMIdentifier", "AXDOMClassList"]
+        fputs("    Checking interesting attributes:\n", stderr)
+        for attr in interestingAttrs {
+            if let value = axCopyAttr(element, attr as CFString) {
+                if let str = value as? String, !str.isEmpty {
+                    fputs("      \(attr) = \"\(str)\"\n", stderr)
+                } else if let num = value as? NSNumber {
+                    fputs("      \(attr) = \(num)\n", stderr)
+                }
+            }
+        }
     }
 
     // Check for children
@@ -220,8 +233,8 @@ func valueBasedContext(_ element: AXUIElement, maxBefore: Int, maxAfter: Int) ->
         return nil
     }
 
-    guard !fullText.isEmpty else {
-        logMethodFailure("VALUE_METHOD", "AXValue is empty")
+    guard !fullText.isEmpty && fullText.count > 0 else {
+        logMethodFailure("VALUE_METHOD", "AXValue is empty (length: \(fullText.count))")
         logMethodSkip("VALUE_METHOD", "value is empty")
         return nil
     }
@@ -304,6 +317,13 @@ func markerBasedContext(_ element: AXUIElement, maxBefore: Int, maxAfter: Int) -
         logMethodFailure("MARKER_METHOD", "Could not get length for document marker range")
         return nil
     }
+
+    // Reject empty text - this means the API is available but not actually providing content
+    guard docLen > 0 && !fullText.isEmpty else {
+        logMethodFailure("MARKER_METHOD", "Document marker range returned empty text (length: \(docLen))")
+        return nil
+    }
+
     logMethodSuccess("MARKER_METHOD", "Got document text with \(docLen) characters")
 
     // Try to get selected marker range
@@ -365,8 +385,8 @@ func rangeBasedContext(_ element: AXUIElement, maxBefore: Int, maxAfter: Int) ->
         return nil
     }
 
-    guard !fullText.isEmpty else {
-        logMethodFailure("RANGE_METHOD", "AXStringForRange returned empty text")
+    guard !fullText.isEmpty && fullText.count > 0 else {
+        logMethodFailure("RANGE_METHOD", "AXStringForRange returned empty text (length: \(fullText.count))")
         return nil
     }
 
@@ -429,6 +449,16 @@ func bestRangeContextWithParentHop(_ element: AXUIElement, maxBefore: Int, maxAf
         return r
     }
 
+    // Check if focused element is a text role - if so, skip parent to avoid UI chrome
+    let textRoles = ["AXTextArea", "AXTextField", "AXWebArea"]
+    if let role = axCopyAttr(element, CFs(kAXRoleAttribute as String)) as? String {
+        if textRoles.contains(role) {
+            dlog("[RANGE_METHOD] Focused element is \(role) but has no text - skipping parent to avoid UI chrome")
+            logMethodSkip("RANGE_METHOD", "text role element with no content (will try tree traversal)")
+            return nil
+        }
+    }
+
     dlog("[RANGE_METHOD] Failed on focused element, trying parent...")
     if let parentAny = axCopyAttr(element, CFs(kAXParentAttribute as String)) {
         let parent = parentAny as! AXUIElement
@@ -452,6 +482,17 @@ func bestMarkerContextWithParentHop(_ element: AXUIElement, maxBefore: Int, maxA
     if let m = markerBasedContext(element, maxBefore: maxBefore, maxAfter: maxAfter) {
         logMethodSuccess("MARKER_METHOD", "Succeeded on focused element")
         return (m, "accessibility:marker")
+    }
+
+    // Check if focused element is a text role (e.g., AXTextArea, AXTextField)
+    // If so, don't try parent - it likely contains UI chrome
+    let textRoles = ["AXTextArea", "AXTextField", "AXWebArea"]
+    if let role = axCopyAttr(element, CFs(kAXRoleAttribute as String)) as? String {
+        if textRoles.contains(role) {
+            dlog("[MARKER_METHOD] Focused element is \(role) but has no text - skipping parent to avoid UI chrome")
+            logMethodSkip("MARKER_METHOD", "text role element with no content (will try tree traversal)")
+            return nil
+        }
     }
 
     dlog("[MARKER_METHOD] Failed on focused element, trying parent...")

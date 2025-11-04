@@ -68,6 +68,11 @@ export class MacOSAccessibilityContextProvider
         String(maxCharsAfter),
       ]
 
+      // Enable debug logging if requested
+      if (options?.debug) {
+        args.push('--debug')
+      }
+
       execFile(
         this.#binaryPath!,
         args,

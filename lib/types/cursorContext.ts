@@ -83,4 +83,10 @@ export interface CursorContextOptions {
    * @default 5000
    */
   timeout?: number
+
+  /**
+   * Enable debug logging to stderr
+   * @default false
+   */
+  debug?: boolean
 }
